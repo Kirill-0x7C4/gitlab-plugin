@@ -48,16 +48,27 @@ public class PushHookTriggerHandlerImplTest {
     public TemporaryFolder tmp = new TemporaryFolder();
 
     private PushHookTriggerHandler pushHookTriggerHandler;
+    private PushHookTriggerHandler customPushHookTriggerHandler;
 
     @Before
     public void setup() {
         pushHookTriggerHandler = new PushHookTriggerHandlerImpl();
+        customPushHookTriggerHandler = new PushHookTriggerHandlerImpl(".*Message Triggering The Build.*");
     }
 
     @Test
-    public void push_ciSkip() throws IOException, InterruptedException {
+    public void push_ciSkipPositive() throws IOException, InterruptedException, GitAPIException, ExecutionException {
+        Git.init().setDirectory(tmp.getRoot()).call();
+        tmp.newFile("test");
+        Git git = Git.open(tmp.getRoot());
+        git.add().addFilepattern("test");
+        RevCommit commit = git.commit().setMessage("test").call();
+        ObjectId head = git.getRepository().resolve(Constants.HEAD);
+        String repositoryUrl = tmp.getRoot().toURI().toString();
+
         final OneShotEvent buildTriggered = new OneShotEvent();
         FreeStyleProject project = jenkins.createFreeStyleProject();
+        project.setScm(new GitSCM(repositoryUrl));
         project.getBuildersList().add(new TestBuilder() {
             @Override
             public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
@@ -67,14 +78,131 @@ public class PushHookTriggerHandlerImplTest {
         });
         project.setQuietPeriod(0);
         pushHookTriggerHandler.handle(project, pushHook()
-                .withCommits(Arrays.asList(commit().withMessage("some message").build(),
-                                           commit().withMessage("[ci-skip]").build()))
+                .withBefore("0000000000000000000000000000000000000000")
+                .withProjectId(1)
+                .withUserName("test")
+                .withObjectKind("tag_push")
+                .withRepository(repository()
+                        .withName("test")
+                        .withHomepage("https://gitlab.org/test")
+                        .withUrl("git@gitlab.org:test.git")
+                        .withGitSshUrl("git@gitlab.org:test.git")
+                        .withGitHttpUrl("https://gitlab.org/test.git")
+                        .build())
+                .withProject(project()
+                        .withNamespace("test-namespace")
+                        .withWebUrl("https://gitlab.org/test")
+                        .build())
+                .withAfter(commit.name())
+
+                .withCommits(Arrays.asList(commit().withMessage("Some Test Message").build(),
+						   				   commit().withMessage("[ci-skip]").build()))
+                .withRef("refs/heads/" + git.nameRev().add(head).call().get(head))
                 .build(), true, newBranchFilter(branchFilterConfig().build(BranchFilterType.All)),
                                       newMergeRequestLabelFilter(null));
 
         buildTriggered.block(10000);
         assertThat(buildTriggered.isSignaled(), is(false));
     }
+    
+
+    @Test
+    public void push_ciSkipNegativeWithTriggerDisabled() throws IOException, InterruptedException, GitAPIException, ExecutionException {
+        Git.init().setDirectory(tmp.getRoot()).call();
+        tmp.newFile("test");
+        Git git = Git.open(tmp.getRoot());
+        git.add().addFilepattern("test");
+        RevCommit commit = git.commit().setMessage("test").call();
+        ObjectId head = git.getRepository().resolve(Constants.HEAD);
+        String repositoryUrl = tmp.getRoot().toURI().toString();
+
+        final OneShotEvent buildTriggered = new OneShotEvent();
+        FreeStyleProject project = jenkins.createFreeStyleProject();
+        project.setScm(new GitSCM(repositoryUrl));
+        project.getBuildersList().add(new TestBuilder() {
+            @Override
+            public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
+                buildTriggered.signal();
+                return true;
+            }
+        });
+        project.setQuietPeriod(0);
+        pushHookTriggerHandler.handle(project, pushHook()
+                .withBefore("0000000000000000000000000000000000000000")
+                .withProjectId(1)
+                .withUserName("test")
+                .withObjectKind("tag_push")
+                .withRepository(repository()
+                        .withName("test")
+                        .withHomepage("https://gitlab.org/test")
+                        .withUrl("git@gitlab.org:test.git")
+                        .withGitSshUrl("git@gitlab.org:test.git")
+                        .withGitHttpUrl("https://gitlab.org/test.git")
+                        .build())
+                .withProject(project()
+                        .withNamespace("test-namespace")
+                        .withWebUrl("https://gitlab.org/test")
+                        .build())
+                .withAfter(commit.name())
+
+                .withCommits(Arrays.asList(commit().withMessage("Some Test Message").build(),
+						   				   commit().withMessage("[ci-skip]").build()))
+                .withRef("refs/heads/" + git.nameRev().add(head).call().get(head))
+                .build(), false, newBranchFilter(branchFilterConfig().build(BranchFilterType.All)),
+                                      newMergeRequestLabelFilter(null));
+
+        buildTriggered.block(10000);
+        assertThat(buildTriggered.isSignaled(), is(true));
+    }
+    
+    @Test
+    public void push_ciSkipNegativeWithIncorrectMessage() throws IOException, InterruptedException, GitAPIException, ExecutionException {
+        Git.init().setDirectory(tmp.getRoot()).call();
+        tmp.newFile("test");
+        Git git = Git.open(tmp.getRoot());
+        git.add().addFilepattern("test");
+        RevCommit commit = git.commit().setMessage("test").call();
+        ObjectId head = git.getRepository().resolve(Constants.HEAD);
+        String repositoryUrl = tmp.getRoot().toURI().toString();
+
+        final OneShotEvent buildTriggered = new OneShotEvent();
+        FreeStyleProject project = jenkins.createFreeStyleProject();
+        project.setScm(new GitSCM(repositoryUrl));
+        project.getBuildersList().add(new TestBuilder() {
+            @Override
+            public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
+                buildTriggered.signal();
+                return true;
+            }
+        });
+        project.setQuietPeriod(0);
+        pushHookTriggerHandler.handle(project, pushHook()
+                .withBefore("0000000000000000000000000000000000000000")
+                .withProjectId(1)
+                .withUserName("test")
+                .withObjectKind("tag_push")
+                .withRepository(repository()
+                        .withName("test")
+                        .withHomepage("https://gitlab.org/test")
+                        .withUrl("git@gitlab.org:test.git")
+                        .withGitSshUrl("git@gitlab.org:test.git")
+                        .withGitHttpUrl("https://gitlab.org/test.git")
+                        .build())
+                .withProject(project()
+                        .withNamespace("test-namespace")
+                        .withWebUrl("https://gitlab.org/test")
+                        .build())
+                .withAfter(commit.name())
+                .withCommits(Arrays.asList(commit().withMessage("Some Test Message").build(),
+						   				   commit().withMessage("[ci-ski]").build()))
+                .withRef("refs/heads/" + git.nameRev().add(head).call().get(head))
+                .build(), true, newBranchFilter(branchFilterConfig().build(BranchFilterType.All)),
+                                      newMergeRequestLabelFilter(null));
+
+        buildTriggered.block(10000);
+        assertThat(buildTriggered.isSignaled(), is(true));
+    }
+    
 
     @Test
     public void push_build() throws IOException, InterruptedException, GitAPIException, ExecutionException {
@@ -114,6 +242,8 @@ public class PushHookTriggerHandlerImplTest {
                         .withWebUrl("https://gitlab.org/test")
                         .build())
                 .withAfter(commit.name())
+                .withCommits(Arrays.asList(commit().withMessage("Some test message").build(),
+						   				   commit().withMessage("Some other test message").build()))
                 .withRef("refs/heads/" + git.nameRev().add(head).call().get(head))
                 .build(), true, newBranchFilter(branchFilterConfig().build(BranchFilterType.All)),
                                       newMergeRequestLabelFilter(null));
@@ -174,5 +304,103 @@ public class PushHookTriggerHandlerImplTest {
         buildTriggered.block(10000);
         assertThat(buildTriggered.isSignaled(), is(true));
         assertThat(buildCount.intValue(), is(2));
+    }
+
+    @Test
+    public void push_filterByCommitMessagePositive() throws IOException, InterruptedException, GitAPIException, ExecutionException {
+        Git.init().setDirectory(tmp.getRoot()).call();
+        tmp.newFile("test");
+        Git git = Git.open(tmp.getRoot());
+        git.add().addFilepattern("test");
+        RevCommit commit = git.commit().setMessage("test").call();
+        ObjectId head = git.getRepository().resolve(Constants.HEAD);
+        String repositoryUrl = tmp.getRoot().toURI().toString();
+
+        final OneShotEvent buildTriggered = new OneShotEvent();
+        FreeStyleProject project = jenkins.createFreeStyleProject();
+        project.setScm(new GitSCM(repositoryUrl));
+        project.getBuildersList().add(new TestBuilder() {
+            @Override
+            public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
+                buildTriggered.signal();
+                return true;
+            }
+        });
+        project.setQuietPeriod(0);
+        customPushHookTriggerHandler.handle(project, pushHook()
+                .withBefore("0000000000000000000000000000000000000000")
+                .withProjectId(1)
+                .withUserName("test")
+                .withObjectKind("push")
+                .withRepository(repository()
+                        .withName("test")
+                        .withHomepage("https://gitlab.org/test")
+                        .withUrl("git@gitlab.org:test.git")
+                        .withGitSshUrl("git@gitlab.org:test.git")
+                        .withGitHttpUrl("https://gitlab.org/test.git")
+                        .build())
+                .withProject(project()
+                        .withNamespace("test-namespace")
+                        .withWebUrl("https://gitlab.org/test")
+                        .build())
+                .withAfter(commit.name())
+
+                .withCommits(Arrays.asList(commit().withMessage("Some Test Message").build(),
+						   				   commit().withMessage("Commit message with Message Triggering The Build").build()))
+                .withRef("refs/heads/" + git.nameRev().add(head).call().get(head))
+                .build(), false, newBranchFilter(branchFilterConfig().build(BranchFilterType.All)),
+                                      newMergeRequestLabelFilter(null));
+
+        buildTriggered.block(10000);
+        assertThat(buildTriggered.isSignaled(), is(true));
+    }
+
+    @Test
+    public void push_filterByCommitMessageNegative() throws IOException, InterruptedException, GitAPIException, ExecutionException {
+        Git.init().setDirectory(tmp.getRoot()).call();
+        tmp.newFile("test");
+        Git git = Git.open(tmp.getRoot());
+        git.add().addFilepattern("test");
+        RevCommit commit = git.commit().setMessage("test").call();
+        ObjectId head = git.getRepository().resolve(Constants.HEAD);
+        String repositoryUrl = tmp.getRoot().toURI().toString();
+
+        final OneShotEvent buildTriggered = new OneShotEvent();
+        FreeStyleProject project = jenkins.createFreeStyleProject();
+        project.setScm(new GitSCM(repositoryUrl));
+        project.getBuildersList().add(new TestBuilder() {
+            @Override
+            public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, BuildListener listener) throws InterruptedException, IOException {
+                buildTriggered.signal();
+                return true;
+            }
+        });
+        project.setQuietPeriod(0);
+        customPushHookTriggerHandler.handle(project, pushHook()
+                .withBefore("0000000000000000000000000000000000000000")
+                .withProjectId(1)
+                .withUserName("test")
+                .withObjectKind("push")
+                .withRepository(repository()
+                        .withName("test")
+                        .withHomepage("https://gitlab.org/test")
+                        .withUrl("git@gitlab.org:test.git")
+                        .withGitSshUrl("git@gitlab.org:test.git")
+                        .withGitHttpUrl("https://gitlab.org/test.git")
+                        .build())
+                .withProject(project()
+                        .withNamespace("test-namespace")
+                        .withWebUrl("https://gitlab.org/test")
+                        .build())
+                .withAfter(commit.name())
+
+                .withCommits(Arrays.asList(commit().withMessage("Some Test Message").build(),
+						   				   commit().withMessage("Message Not Triggering The Build").build()))
+                .withRef("refs/heads/" + git.nameRev().add(head).call().get(head))
+                .build(), false, newBranchFilter(branchFilterConfig().build(BranchFilterType.All)),
+                                      newMergeRequestLabelFilter(null));
+
+        buildTriggered.block(10000);
+        assertThat(buildTriggered.isSignaled(), is(false));
     }
 }

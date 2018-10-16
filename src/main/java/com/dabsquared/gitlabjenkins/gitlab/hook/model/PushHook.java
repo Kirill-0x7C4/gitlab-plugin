@@ -113,6 +113,20 @@ public class PushHook extends WebHook {
         this.totalCommitsCount = totalCommitsCount;
     }
 
+    public String getLastCommitMessage() {
+        
+    	String message = "";
+    	if ( this.commits != null &&
+            !this.commits.isEmpty() &&
+             this.commits.get(commits.size() - 1).getMessage() != null) {
+    		
+    		message= commits.get(commits.size() - 1).getMessage();
+    	}
+
+    	return message;
+    }
+
+   
     @Override
     public boolean equals(Object o) {
         if (this == o) {

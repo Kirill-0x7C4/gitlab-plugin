@@ -6,6 +6,9 @@
       <f:entry title="Push Events" field="triggerOnPush">
         <f:checkbox default="true"/>
       </f:entry>
+      <f:entry title="Commit message (regex) for triggering a build" help="/plugin/gitlab-plugin/help/help-notePushRegex.html">
+        <f:textbox field="notePushRegex" default="JenkinsBuildThis"/>
+      </f:entry>
       <f:entry title="Opened Merge Request Events" field="triggerOnMergeRequest">
         <f:checkbox default="true"/>
       </f:entry>

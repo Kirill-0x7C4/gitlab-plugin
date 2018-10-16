@@ -2,17 +2,21 @@ package com.dabsquared.gitlabjenkins.trigger.handler.push;
 
 import com.dabsquared.gitlabjenkins.cause.CauseData;
 import com.dabsquared.gitlabjenkins.gitlab.hook.model.Commit;
+import com.dabsquared.gitlabjenkins.gitlab.hook.model.NoteHook;
 import com.dabsquared.gitlabjenkins.gitlab.hook.model.PushHook;
 import com.dabsquared.gitlabjenkins.trigger.exception.NoRevisionToBuildException;
 import com.dabsquared.gitlabjenkins.trigger.filter.BranchFilter;
 import com.dabsquared.gitlabjenkins.trigger.filter.MergeRequestLabelFilter;
 import com.dabsquared.gitlabjenkins.trigger.handler.AbstractWebHookTriggerHandler;
+import com.dabsquared.gitlabjenkins.webhook.build.PushBuildAction;
+
 import hudson.model.Job;
 import hudson.plugins.git.GitSCM;
 import hudson.plugins.git.RevisionParameterAction;
 import org.eclipse.jgit.util.StringUtils;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 import static com.dabsquared.gitlabjenkins.cause.CauseDataBuilder.causeData;
 import static com.dabsquared.gitlabjenkins.trigger.handler.builder.generated.BuildStatusUpdateBuilder.buildStatusUpdate;
@@ -23,10 +27,20 @@ import static com.dabsquared.gitlabjenkins.trigger.handler.builder.generated.Bui
 class PushHookTriggerHandlerImpl extends AbstractWebHookTriggerHandler<PushHook> implements PushHookTriggerHandler {
 
     private static final String NO_COMMIT = "0000000000000000000000000000000000000000";
+    private final String notePushRegex;
 
+    PushHookTriggerHandlerImpl(String notePushRegex) {
+        this.notePushRegex = notePushRegex;
+    }
+    
+    PushHookTriggerHandlerImpl() {
+        this.notePushRegex = "";
+    }
+    
     @Override
     public void handle(Job<?, ?> job, PushHook hook, boolean ciSkip, BranchFilter branchFilter, MergeRequestLabelFilter mergeRequestLabelFilter) {
-        if (isNoRemoveBranchPush(hook)) {
+    	if (isNoRemoveBranchPush(hook) &&
+        	isValidTriggerPhrase(hook.getLastCommitMessage())) {
             super.handle(job, hook, ciSkip, branchFilter, mergeRequestLabelFilter);
         }
     }
@@ -141,5 +155,15 @@ class PushHookTriggerHandlerImpl extends AbstractWebHookTriggerHandler<PushHook>
 
     private boolean isNoRemoveBranchPush(PushHook hook) {
         return hook.getAfter() != null && !hook.getAfter().equals(NO_COMMIT);
+    }
+    
+    private boolean isValidTriggerPhrase(String note) {
+   	
+        if (StringUtils.isEmptyOrNull(this.notePushRegex)) {
+            return true; // Regex phrase is empty, build can be triggered
+        }
+
+        final Pattern pattern = Pattern.compile(this.notePushRegex, Pattern.DOTALL | Pattern.MULTILINE );
+        return pattern.matcher(note).matches();
     }
 }
